@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.19;
 
-import "./ISettlementModule.sol";
-
 /**
- * @title Interface for the Delayed Settlement Module (DSM): a timelock to schedule transactions
+ * @title Interface for Settlement Modules: timelock (freeze funds) , Reject, etc
  * @dev This interface defines the functions for :
- * - preventing settlement via scheduling
- * - executing settlement
+ * - preventing transactions when the firewall is triggered
+ * - executing a transaction previously prevented
  * - get paused status
  */
-interface IDelayedSettlementModule is ISettlementModule {
+interface ISettlementModule {
     /**
-     * @notice Preventing a transaction for a DelayedSettlement Module schedules a delayed call from the DSM to a target.
+     * @notice Schedules a delayed call from the DSM to a target.
      * @dev The call includes the calldata innerPayload and callvalue of value.
      * The function should return a unique identifier for the scheduled effect as newEffectID.
      * @param target The address of the target contract.
@@ -34,15 +32,4 @@ interface IDelayedSettlementModule is ISettlementModule {
      * TODO: provide docs for the extendedPayload payload format
      */
     function execute(bytes calldata extendedPayload) external;
-
-    /**
-     * @notice Returns the UNIX timestamp at which the last module pause occurred.
-     * @dev The function may return 0 if the contract has not been paused yet.
-     * It should return a value that's at least 2**248 if the contract is currently paused until further notice.
-     * It should return 2**256 - 1.
-     * @return pauseTimestamp The UNIX timestamp of the last pause.
-     *
-     * TODO: provide docs for the pausing mechanism
-     */
-    function pausedTill() external view returns (uint256 pauseTimestamp);
 }

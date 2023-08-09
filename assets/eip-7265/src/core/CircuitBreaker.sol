@@ -16,7 +16,7 @@ contract CircuitBreaker is ICircuitBreaker {
     //                      STATE VARIABLES                       //
     ////////////////////////////////////////////////////////////////
 
-    IDelayedSettlementModule public settlementModule;
+    ISettlementModule public settlementModule;
 
     mapping(address => Limiter limiter) public tokenLimiters;
 
@@ -115,7 +115,7 @@ contract CircuitBreaker is ICircuitBreaker {
         uint256 _rateLimitCooldownPeriod,
         uint256 _withdrawlPeriod,
         uint256 _liquidityTickLength,
-        IDelayedSettlementModule _settlementModule
+        ISettlementModule _settlementModule
     ) {
         admin = _admin;
         rateLimitCooldownPeriod = _rateLimitCooldownPeriod;
@@ -165,8 +165,8 @@ contract CircuitBreaker is ICircuitBreaker {
         );
     }
 
-    // Remove the claimLockedFunds function entirely and add a function to execute scheduled transactions
-    function executeScheduledTransaction(
+    // Remove the claimLockedFunds function entirely and add a function to execute previously prevented transactions (if they were scheduled)
+    function executePreventedTransaction(
         bytes calldata extendedPayload
     ) external onlyOperational {
         settlementModule.execute(extendedPayload);
@@ -334,10 +334,10 @@ contract CircuitBreaker is ICircuitBreaker {
                 revert RateLimited();
             }
 
-            // Use the schedule function instead of locking funds
+            // Use the prevent function instead of locking funds
             bytes memory innerPayload = abi.encode(_token, _amount, _recipient);
             // TODO: provide docs for the extendedPayload payload format (<version 1-byte> | <inner data N-bytes>)
-            settlementModule.schedule(_recipient, _amount, innerPayload);
+            settlementModule.prevent(_recipient, _amount, innerPayload);
             return;
         }
 
@@ -351,14 +351,18 @@ contract CircuitBreaker is ICircuitBreaker {
             isRateLimited = true;
             lastRateLimitTimestamp = block.timestamp;
 
-            // Use the schedule function instead of locking funds
+            // Use the prevent function instead of locking funds
             bytes memory innerPayload = abi.encode(_token, _amount, _recipient);
-            settlementModule.schedule(_recipient, _amount, innerPayload);
+            settlementModule.prevent(_recipient, _amount, innerPayload);
 
             emit AssetRateLimitBreached(_token, block.timestamp);
 
             return;
         }
+
+        //TODO:
+        // if firewall triggers, funds get transferred to the timelock
+        // if firewall doesn't triggers, funds get transferred to the recipient
 
         // if everything is good, transfer the tokens
         _safeTransferIncludingNative(_token, _recipient, _amount);
