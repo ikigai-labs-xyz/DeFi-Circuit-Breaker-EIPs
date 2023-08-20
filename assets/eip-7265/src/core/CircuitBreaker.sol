@@ -28,6 +28,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
     uint256 public immutable TICK_LENGTH;
 
     bool public isOperational = true;
+    bool public isCircuitBreakerDisabled = false;
 
     ////////////////////////////////////////////////////////////////
     //                           ERRORS                           //
@@ -126,6 +127,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         bool newOperationalStatus
     ) external override onlyOwner {
         isOperational = newOperationalStatus;
+    }
+
+    /// @inheritdoc IERC7265CircuitBreaker
+    function setCircuitBreakerDisabled(
+        bool _isCircuitBreakerDisabled
+    ) external override onlyOwner {
+        isCircuitBreakerDisabled = _isCircuitBreakerDisabled;
     }
 
     /// @inheritdoc IERC7265CircuitBreaker
@@ -237,6 +245,11 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         /// @dev uint256 could overflow into negative
         Limiter storage limiter = limiters[identifier];
 
+        // Check if the circuit breaker is disabled
+        if (isCircuitBreakerDisabled) {
+            return false;
+        }
+
         emit ParameterInrease(amount, identifier);
         limiter.recordChange(int256(amount), WITHDRAWAL_PERIOD, TICK_LENGTH);
         if (limiter.status() == LimitStatus.Triggered) {
@@ -260,8 +273,8 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         bytes memory settlementPayload
     ) internal onlyProtected onlyOperational returns (bool) {
         Limiter storage limiter = limiters[identifier];
-        // Check if the token has enforced rate limited
-        if (!limiter.isInitialized()) {
+        // Check if the token has enforced rate limited or if the circuit breaker is disabled
+        if (!limiter.isInitialized() || isCircuitBreakerDisabled) {
             // if it is not rate limited, just return false
             return false;
         }

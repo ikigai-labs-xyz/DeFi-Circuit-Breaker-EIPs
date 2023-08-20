@@ -152,4 +152,10 @@ interface IERC7265CircuitBreaker {
     /// @dev MAY be called by admin to pause / unpause the Circuit Breaker
     /// While the protocol is not operational: inflows, outflows, and claiming locked funds MUST revert
     function setCircuitBreakerOperationalStatus(bool newOperationalStatus) external;
+    /// @notice Function for disabling / enabling the Circuit Breaker
+    /// @param _isCircuitBreakerDisabled : true = disabled, false = enabled
+    /// @dev MUST revert if caller is not the current admin.
+    /// @dev MAY be called by admin to disable / enable the Circuit Breaker
+    /// While the circuit breaker is disabled: inflows, outflows, and claiming locked funds MUST NOT revert
+    function setCircuitBreakerDisabled(bool _isCircuitBreakerDisabled) external;
 }
