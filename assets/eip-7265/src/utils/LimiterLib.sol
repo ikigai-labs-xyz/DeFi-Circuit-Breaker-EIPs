@@ -5,6 +5,7 @@ import {Limiter, LiqChangeNode} from "../static/Structs.sol";
 import {SafeCast} from "openzeppelin-contracts/utils/math/SafeCast.sol";
 import {ISettlementModule} from "../interfaces/ISettlementModule.sol";
 
+// BPS = Basis Points : 1 Basis Point is equivalent to 0.01%
 uint256 constant BPS_DENOMINATOR = 10000;
 
 enum LimitStatus {
@@ -14,17 +15,30 @@ enum LimitStatus {
     Triggered
 }
 
+/**
+ * @title LimiterLib
+ * @dev Set of tools to track a security parameter over a specific time period.
+ * @dev It offers tools to record changes, enforce limits based on set thresholds, and maintain a historical view of the security parameter.
+ */
 library LimiterLib {
     error InvalidMinimumLiquidityThreshold();
     error LimiterAlreadyInitialized();
     error LimiterNotInitialized();
 
+    /**
+     * @notice Initialize the limiter
+     * @param limiter The limiter to initialize
+     * @param minLiqRetainedBps The minimum liquidity that MUST be retained in percent
+     * @param limitBeginThreshold The minimal amount of a security parameter that MUST be reached before the Circuit Breaker checks for a breach
+     * @param settlementModule The address of the settlement module chosen when the CircuitBreaker triggers
+     */
     function init(
         Limiter storage limiter,
         uint256 minLiqRetainedBps,
         uint256 limitBeginThreshold,
         ISettlementModule settlementModule
     ) internal {
+        // MUST define a minimum liquidity threshold > 0% and < 100%
         if (minLiqRetainedBps == 0 || minLiqRetainedBps > BPS_DENOMINATOR) {
             revert InvalidMinimumLiquidityThreshold();
         }
@@ -34,6 +48,13 @@ library LimiterLib {
         limiter.settlementModule = settlementModule;
     }
 
+    /**
+     * @notice Update the limiter parameters
+     * @param limiter The limiter to update
+     * @param minLiqRetainedBps The minimum liquidity that MUST be retained in percent
+     * @param limitBeginThreshold The minimal amount of a security parameter that MUST be reached before the Circuit Breaker checks for a breach
+     * @param settlementModule The address of the settlement module chosen when the CircuitBreaker triggers
+     */
     function updateParams(
         Limiter storage limiter,
         uint256 minLiqRetainedBps,
@@ -49,6 +70,13 @@ library LimiterLib {
         limiter.settlementModule = settlementModule;
     }
 
+    /**
+     * @notice Record a change in the security parameter
+     * @param limiter The limiter to record the change for
+     * @param amount The amount of the change
+     * @param withdrawalPeriod The period over which the change is recorded
+     * @param tickLength Unit of time to consider in seconds
+     */
     function recordChange(
         Limiter storage limiter,
         int256 amount,
@@ -60,6 +88,7 @@ library LimiterLib {
             return;
         }
 
+        // all transactions that occur within a given tickLength will have the same currentTickTimestamp
         uint256 currentTickTimestamp = getTickTimestamp(
             block.timestamp,
             tickLength
@@ -102,10 +131,21 @@ library LimiterLib {
         }
     }
 
+    /**
+     * @notice Sync the limiter
+     * @param limiter The limiter to sync
+     * @param withdrawalPeriod the max period to keep track of
+     */
     function sync(Limiter storage limiter, uint256 withdrawalPeriod) internal {
         sync(limiter, withdrawalPeriod, type(uint256).max);
     }
 
+    /**
+     * @notice Sync the limiter to clear old data
+     * @param limiter The limiter to sync
+     * @param withdrawalPeriod the max period to keep track of
+     * @param totalIters the max number of iterations to perform
+     */
     function sync(
         Limiter storage limiter,
         uint256 withdrawalPeriod,
@@ -143,6 +183,11 @@ library LimiterLib {
         limiter.liqInPeriod -= totalChange;
     }
 
+    /**
+     * @notice Get the status of the limiter
+     * @param limiter The limiter to get the status for
+     * @return The status of the limiter
+     */
     function status(
         Limiter storage limiter
     ) internal view returns (LimitStatus) {
@@ -168,12 +213,24 @@ library LimiterLib {
         return futureLiq < minLiq ? LimitStatus.Triggered : LimitStatus.Ok;
     }
 
+    /**
+     * @notice Get the current liquidity
+     * @param limiter The limiter to get the liquidity for
+     * @return Has the minLiqRetainedBps of the Limiter been set ?
+     */
     function isInitialized(
         Limiter storage limiter
     ) internal view returns (bool) {
         return limiter.minLiqRetainedBps > 0;
     }
 
+    /**
+        * @notice Get the timestamp for the current period (as defined by ticklength)
+        * @param t The current timestamp
+        * @param tickLength The tick length
+        * @return The current tick timestamp
+        */
+     */
     function getTickTimestamp(
         uint256 t,
         uint256 tickLength
