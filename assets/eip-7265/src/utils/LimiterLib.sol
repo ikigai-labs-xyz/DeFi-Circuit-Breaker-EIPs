@@ -17,8 +17,9 @@ enum LimitStatus {
 
 /**
  * @title LimiterLib
- * @dev Set of tools to track a security parameter over a specific time period.
- * @dev It offers tools to record changes, enforce limits based on set thresholds, and maintain a historical view of the security parameter.
+ * @notice Set of tools to track a security parameter over a specific time period. Offers tools to record changes, enforce limits based on set thresholds,
+ * and maintain a historical view of the security parameter.
+ * @dev This library implements the logic for tracking security parameters, and identifying breached limits for the base CircuitBreaker
  */
 library LimiterLib {
     error InvalidMinimumLiquidityThreshold();
@@ -26,10 +27,10 @@ library LimiterLib {
     error LimiterNotInitialized();
 
     /**
-     * @notice Initialize the limiter
+     * @notice Initialize a limiter
      * @param limiter The limiter to initialize
      * @param minLiqRetainedBps The minimum liquidity that MUST be retained in percent
-     * @param limitBeginThreshold The minimal amount of a security parameter that MUST be reached before the Circuit Breaker checks for a breach
+     * @param limitBeginThreshold The minimal absolute amount of a security parameter that MUST be reached before the Circuit Breaker checks for a breach
      * @param settlementModule The address of the settlement module chosen when the CircuitBreaker triggers
      */
     function init(
@@ -49,7 +50,7 @@ library LimiterLib {
     }
 
     /**
-     * @notice Update the limiter parameters
+     * @notice Update the parameter of a limiter
      * @param limiter The limiter to update
      * @param minLiqRetainedBps The minimum liquidity that MUST be retained in percent
      * @param limitBeginThreshold The minimal amount of a security parameter that MUST be reached before the Circuit Breaker checks for a breach
@@ -185,6 +186,7 @@ library LimiterLib {
 
     /**
      * @notice Get the status of the limiter
+     * The status of the limiter defines whether the limiter for a security paramter has been breached
      * @param limiter The limiter to get the status for
      * @return The status of the limiter
      */
@@ -225,12 +227,11 @@ library LimiterLib {
     }
 
     /**
-        * @notice Get the timestamp for the current period (as defined by ticklength)
-        * @param t The current timestamp
-        * @param tickLength The tick length
-        * @return The current tick timestamp
-        */
-     */
+     * @notice Get the timestamp for the current period (as defined by ticklength)
+     * @param t The current timestamp
+     * @param tickLength The tick length
+     * @return The current tick timestamp
+    */
     function getTickTimestamp(
         uint256 t,
         uint256 tickLength
