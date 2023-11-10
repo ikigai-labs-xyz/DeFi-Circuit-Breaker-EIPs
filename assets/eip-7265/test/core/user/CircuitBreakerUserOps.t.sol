@@ -363,7 +363,6 @@ contract CircuitBreakerUserOpsTest is Test {
 
         vm.warp(4 days);
         vm.prank(alice);
-        circuitBreaker.overrideExpiredRateLimit();
         assertEq(circuitBreaker.isRateLimited(), false);
     }
 
