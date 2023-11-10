@@ -228,7 +228,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         uint256 _tickTimestamp
     ) external view returns (uint256 nextTimestamp, int256 amount) {
         LiqChangeNode storage node = limiters[identifier].listNodes[
-            _tickTimestamp
+            uint32(_tickTimestamp)  
         ];
         nextTimestamp = node.nextTimestamp;
         amount = node.amount;
