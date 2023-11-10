@@ -119,8 +119,10 @@ library LimiterLib {
         ) {
             LiqChangeNode storage node = limiter.listNodes[currentHead];
             totalChange += node.amount;
-            // Clear data
             currentHead = node.nextTimestamp;
+            // Clear data
+            delete node.amount;
+            delete node.nextTimestamp;
             // forgefmt: disable-next-item
             unchecked {
                 ++iter;
