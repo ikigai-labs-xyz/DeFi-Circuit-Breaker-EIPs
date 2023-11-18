@@ -69,6 +69,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         _;
     }
 
+    /**
+     * @notice CircuitBreaker constructor
+     * @param _rateLimitCooldownPeriod The cooldown period for the rate limiter
+     * @param _withdrawalPeriod The withdrawal period for the rate limiter
+     * @param _liquidityTickLength The tick length for the rate limiter
+     * @param _initialOwner The initial owner of the contract
+     */
     constructor(
         uint256 _rateLimitCooldownPeriod,
         uint256 _withdrawalPeriod,
@@ -139,12 +146,20 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         isOperational = newOperationalStatus;
     }
 
+    /**
+     * @notice Called by the owner to set the rate limit cooldown period
+     * @param _gracePeriodEndTimestamp The new rate limit cooldown period
+     */
     function startGracePeriod(uint256 _gracePeriodEndTimestamp) external onlyOwner {
         if (_gracePeriodEndTimestamp <= block.timestamp) revert CircuitBreaker__InvalidGracePeriodEnd();
         gracePeriodEndTimestamp = _gracePeriodEndTimestamp;
         emit GracePeriodStarted(_gracePeriodEndTimestamp);
     }
 
+    /**
+     * @notice Called by the owner to override and disable rate limit
+     * @param identifier The identifier of the limiter
+     */
     function overrideRateLimit(bytes32 identifier) external onlyOwner {
         if (!(isRateLimited())) revert CircuitBreaker__NotRateLimited();
         rateLimitEndTimestamp = block.timestamp - 1;
@@ -155,7 +170,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
      * @dev Override the status of the limiter
      * @param identifier The identifier of the limiter
      * @param overrideStatus The status to override to
-     * @return The new status of the limiter
+     * @return bool the new status of the limiter
      */
     function setLimiterOverriden(
         bytes32 identifier,
@@ -211,10 +226,12 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
 
     /// @dev EXTERNAL VIEW FUNCTIONS
 
+    /// @inheritdoc IERC7265CircuitBreaker
     function isParameterRateLimited(bytes32 identifier) external view returns (bool) {
         return limiters[identifier].status() == LimitStatus.Triggered;
     }
 
+    /// @inheritdoc IERC7265CircuitBreaker
     function isInGracePeriod() public view returns (bool) {
         return block.timestamp <= gracePeriodEndTimestamp;
     }
@@ -223,6 +240,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         return block.timestamp <= rateLimitEndTimestamp;
     }
 
+    /**
+     * @notice Get the next timestamp and amount of the limiter at a given tick
+     * @param identifier The identifier of the limiter
+     * @param _tickTimestamp The timestamp of the tick
+     * @return nextTimestamp The next timestamp of the tick
+     * @return amount The amount value on the limiter at the tick
+     */
     function liquidityChanges(
         bytes32 identifier,
         uint256 _tickTimestamp
@@ -236,6 +260,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
 
     /// @dev INTERNAL FUNCTIONS
 
+    /**
+     * @notice Add a new security parameter
+     * @param identifier The identifier of the limiter
+     * @param minValBps The minimum value of the limiter in basis points
+     * @param limitBeginThreshold The threshold to begin the limiter
+     * @param settlementModule The settlement module to use
+     */
     function _addSecurityParameter(
         bytes32 identifier,
         uint256 minValBps,
@@ -256,6 +287,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         );
     }
 
+    /**
+     * @notice Update a security parameter
+     * @param identifier The identifier of the limiter
+     * @param minValBps The minimum value of the limiter in basis points
+     * @param limitBeginThreshold The threshold to begin the limiter
+     * @param settlementModule The settlement module to use
+     */
     function _updateSecurityParameter(
         bytes32 identifier,
         uint256 minValBps,
@@ -271,6 +309,15 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         limiter.sync(WITHDRAWAL_PERIOD);
     }
 
+    /**
+     * @notice Increase parameter on a limiter
+     * @param identifier The identifier of the limiter
+     * @param amount The amount to increase by
+     * @param settlementTarget The settlement target
+     * @param settlementValue The settlement value
+     * @param settlementPayload The settlement payload
+     * @return bool if the rate limit is triggered
+     */
     function _increaseParameter(
         bytes32 identifier,
         uint256 amount,
@@ -297,6 +344,15 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         return false;
     }
 
+    /**
+     * @notice Decrease parameter on a limiter
+     * @param identifier The identifier of the limiter
+     * @param amount The amount to decrease by
+     * @param settlementTarget The settlement target
+     * @param settlementValue The settlement value
+     * @param settlementPayload The settlement payload
+     * @return bool if the rate limit is triggered
+     */
     function _decreaseParameter(
         bytes32 identifier,
         uint256 amount,
@@ -329,6 +385,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         return false;
     }
 
+    /**
+     * @notice Called when the circuit breaker is triggered
+     * @param limiter The limiter that was triggered
+     * @param settlementTarget The settlement target
+     * @param settlementValue The settlement value
+     * @param settlementPayload The settlement payload
+     */
     function _onCircuitBreakerTrigger(
         Limiter storage limiter,
         address settlementTarget,
