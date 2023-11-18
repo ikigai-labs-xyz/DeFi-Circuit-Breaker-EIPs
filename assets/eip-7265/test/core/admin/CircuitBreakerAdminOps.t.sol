@@ -197,6 +197,7 @@ contract CircuitBreakerAdminOpsTest is Test {
         bool overrideStatus = true;
         bool expected = true;
 
+        vm.prank(admin);
         bool result = circuitBreaker.setLimiterOverriden(
             identifier,
             overrideStatus

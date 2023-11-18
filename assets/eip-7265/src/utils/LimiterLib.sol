@@ -60,13 +60,10 @@ library LimiterLib {
             return;
         }
 
-        uint256 currentTickTimestamp = getTickTimestamp(
-            block.timestamp,
-            tickLength
-        );
+        uint32 currentTickTimestamp = uint32(block.timestamp - (block.timestamp % tickLength));
         limiter.liqInPeriod += amount;
 
-        uint256 listHead = limiter.listHead;
+        uint32 listHead = limiter.listHead;
         if (listHead == 0) {
             // if there is no head, set the head to the new inflow
             limiter.listHead = currentTickTimestamp;
@@ -84,7 +81,7 @@ library LimiterLib {
             }
 
             // check if tail is the same as block.timestamp (multiple txs in same block)
-            uint256 listTail = limiter.listTail;
+            uint32 listTail = limiter.listTail;
             if (listTail == currentTickTimestamp) {
                 // add amount
                 limiter.listNodes[currentTickTimestamp].amount += amount;
@@ -111,7 +108,7 @@ library LimiterLib {
         uint256 withdrawalPeriod,
         uint256 totalIters
     ) internal {
-        uint256 currentHead = limiter.listHead;
+        uint32 currentHead = limiter.listHead;
         int256 totalChange = 0;
         uint256 iter = 0;
 
@@ -122,10 +119,10 @@ library LimiterLib {
         ) {
             LiqChangeNode storage node = limiter.listNodes[currentHead];
             totalChange += node.amount;
-            uint256 nextTimestamp = node.nextTimestamp;
+            currentHead = node.nextTimestamp;
             // Clear data
-            limiter.listNodes[currentHead];
-            currentHead = nextTimestamp;
+            delete node.amount;
+            delete node.nextTimestamp;
             // forgefmt: disable-next-item
             unchecked {
                 ++iter;
@@ -134,8 +131,8 @@ library LimiterLib {
 
         if (currentHead == 0) {
             // If the list is empty, set the tail and head to current times
-            limiter.listHead = block.timestamp;
-            limiter.listTail = block.timestamp;
+            limiter.listHead = uint32(block.timestamp);
+            limiter.listTail = uint32(block.timestamp);
         } else {
             limiter.listHead = currentHead;
         }
@@ -160,24 +157,17 @@ library LimiterLib {
             return LimitStatus.Inactive;
         }
 
-        int256 futureLiq = currentLiq + limiter.liqInPeriod;
-        // NOTE: uint256 to int256 conversion here is safe
-        int256 minLiq = (currentLiq * int256(limiter.minLiqRetainedBps)) /
-            int256(BPS_DENOMINATOR);
-
-        return futureLiq < minLiq ? LimitStatus.Triggered : LimitStatus.Ok;
+        return 
+            (currentLiq + limiter.liqInPeriod) < //futureLiq
+            // NOTE: uint256 to int256 conversion here is safe
+            (currentLiq * int256(limiter.minLiqRetainedBps)) / int256(BPS_DENOMINATOR) ? //minLiq
+                LimitStatus.Triggered : 
+                LimitStatus.Ok;
     }
 
     function isInitialized(
         Limiter storage limiter
     ) internal view returns (bool) {
         return limiter.minLiqRetainedBps > 0;
-    }
-
-    function getTickTimestamp(
-        uint256 t,
-        uint256 tickLength
-    ) internal pure returns (uint256) {
-        return t - (t % tickLength);
     }
 }

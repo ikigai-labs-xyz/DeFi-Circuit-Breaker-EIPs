@@ -164,12 +164,6 @@ interface IERC7265CircuitBreaker {
     /// MUST revert if the circuit breaker is not currently rate limited.
     function overrideRateLimit(bytes32 identifier) external;
 
-    /// @notice Override an expired rate limit
-    /// @dev This method MAY be called by anyone once the cooldown period is complete. 
-    /// MUST revert if the cooldown period is not complete.
-    /// MUST revert if the circuit breaker is not currently rate limited.
-    function overrideExpiredRateLimit() external;
-
     /// @notice Check if the circuit breaker is currently in grace period
     /// @return isInGracePeriod MUST return TRUE if the circuit breaker is currently in grace period, FALSE otherwise
     function isInGracePeriod() external view returns (bool);
