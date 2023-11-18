@@ -183,6 +183,7 @@ contract AssetCircuitBreakerTest is Test {
         bytes32 tokenIdentifier = circuitBreaker.getTokenIdentifier(
             address(token)
         );
+        vm.prank(admin);
         circuitBreaker.setLimiterOverriden(tokenIdentifier, true);
 
         uint256 withdrawalAmount = 300_001e18;

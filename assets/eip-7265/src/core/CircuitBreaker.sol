@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.22;
 
 import {SafeERC20} from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/token/ERC20/IERC20.sol";
@@ -29,13 +29,13 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
 
     bool public isOperational = true;
 
-    bool public isRateLimited;
+    uint256 public rateLimitEndTimestamp;
 
     uint256 public rateLimitCooldownPeriod;
 
-    uint256 public lastRateLimitTimestamp;
-
     uint256 public gracePeriodEndTimestamp;
+
+    
 
     ////////////////////////////////////////////////////////////////
     //                           ERRORS                           //
@@ -43,10 +43,8 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
 
     error CircuitBreaker__NotAProtectedContract();
     error CircuitBreaker__NotOperational();
-    error CircuitBreaker__RateLimited();
     error CircuitBreaker__NotRateLimited();
     error CircuitBreaker__InvalidGracePeriodEnd();
-    error CircuitBreaker__CooldownPeriodNotReached();
 
     ////////////////////////////////////////////////////////////////
     //                         MODIFIERS                          //
@@ -95,7 +93,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
     function addProtectedContracts(
         address[] calldata _ProtectedContracts
     ) external override onlyOwner {
-        for (uint256 i = 0; i < _ProtectedContracts.length; i++) {
+        for (uint256 i = 0; i < _ProtectedContracts.length; ++i) {
             isProtectedContract[_ProtectedContracts[i]] = true;
         }
     }
@@ -104,7 +102,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
     function removeProtectedContracts(
         address[] calldata _ProtectedContracts
     ) external override onlyOwner {
-        for (uint256 i = 0; i < _ProtectedContracts.length; i++) {
+        for (uint256 i = 0; i < _ProtectedContracts.length; ++i) {
             isProtectedContract[_ProtectedContracts[i]] = false;
         }
     }
@@ -163,8 +161,8 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
      * @param identifier The identifier of the limiter
      */
     function overrideRateLimit(bytes32 identifier) external onlyOwner {
-        if (!isRateLimited) revert CircuitBreaker__NotRateLimited();
-        isRateLimited = false;
+        if (!(isRateLimited())) revert CircuitBreaker__NotRateLimited();
+        rateLimitEndTimestamp = block.timestamp - 1;
         limiters[identifier].sync(WITHDRAWAL_PERIOD);
     }
 
@@ -177,7 +175,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
     function setLimiterOverriden(
         bytes32 identifier,
         bool overrideStatus
-    ) external returns (bool) {
+    ) external onlyOwner returns (bool) {
         return limiters[identifier].overriden = overrideStatus;
     }
 
@@ -217,16 +215,6 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
             );
     }
 
-    /// @inheritdoc IERC7265CircuitBreaker
-    function overrideExpiredRateLimit() external {
-        if (!isRateLimited) revert CircuitBreaker__NotRateLimited();
-        if (block.timestamp - lastRateLimitTimestamp < rateLimitCooldownPeriod) {
-            revert CircuitBreaker__CooldownPeriodNotReached();
-        }
-
-        isRateLimited = false;
-    }
-
     /**
      * @dev Due to potential inactivity, the linked list may grow to where
      * it is better to clear the backlog in advance to save gas for the users
@@ -248,6 +236,10 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         return block.timestamp <= gracePeriodEndTimestamp;
     }
 
+    function isRateLimited() public view returns (bool) {
+        return block.timestamp <= rateLimitEndTimestamp;
+    }
+
     /**
      * @notice Get the next timestamp and amount of the limiter at a given tick
      * @param identifier The identifier of the limiter
@@ -260,7 +252,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         uint256 _tickTimestamp
     ) external view returns (uint256 nextTimestamp, int256 amount) {
         LiqChangeNode storage node = limiters[identifier].listNodes[
-            _tickTimestamp
+            uint32(_tickTimestamp)  
         ];
         nextTimestamp = node.nextTimestamp;
         amount = node.amount;
@@ -340,7 +332,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         limiter.recordChange(int256(amount), WITHDRAWAL_PERIOD, TICK_LENGTH);
         if (limiter.status() == LimitStatus.Triggered && !isInGracePeriod()) {
             emit RateLimited(identifier);
-            isRateLimited = true;
+            rateLimitEndTimestamp = block.timestamp + rateLimitCooldownPeriod;
             _onCircuitBreakerTrigger(
                 limiter,
                 settlementTarget,
@@ -381,7 +373,7 @@ contract CircuitBreaker is IERC7265CircuitBreaker, Ownable {
         // Check if rate limit is triggered after withdrawal
         if (limiter.status() == LimitStatus.Triggered && !isInGracePeriod()) {
             emit RateLimited(identifier);
-            isRateLimited = true;
+            rateLimitEndTimestamp = block.timestamp + rateLimitCooldownPeriod;
             _onCircuitBreakerTrigger(
                 limiter,
                 settlementTarget,

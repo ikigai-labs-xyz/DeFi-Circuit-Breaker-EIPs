@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 struct LiqChangeNode {
-    uint256 nextTimestamp;
+    uint32 nextTimestamp;
     int256 amount;
 }
 
@@ -13,9 +13,9 @@ struct Limiter {
     uint256 limitBeginThreshold;
     int256 liqTotal;
     int256 liqInPeriod;
-    uint256 listHead;
-    uint256 listTail;
-    mapping(uint256 tick => LiqChangeNode node) listNodes;
+    uint32 listHead;
+    uint32 listTail;
+    mapping(uint32 tick => LiqChangeNode node) listNodes;
     ISettlementModule settlementModule;
     bool overriden;
 }
