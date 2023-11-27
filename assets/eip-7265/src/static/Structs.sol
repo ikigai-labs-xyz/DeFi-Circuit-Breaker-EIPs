@@ -7,6 +7,7 @@ struct LiqChangeNode {
 }
 
 import {ISettlementModule} from "../interfaces/ISettlementModule.sol";
+import {ICircuitBreaker} from "../interfaces/ICircuitBreaker.sol";
 
 struct Limiter {
     uint256 minLiqRetainedBps;
@@ -15,7 +16,9 @@ struct Limiter {
     int256 liqInPeriod;
     uint32 listHead;
     uint32 listTail;
-    mapping(uint32 tick => LiqChangeNode node) listNodes;
+    // removed for gas optimization.  Use mapping in implementation contract instead listNodes[identifier][timestamp]
+    // mapping(uint32 tick => LiqChangeNode node) listNodes;
     ISettlementModule settlementModule;
+    ICircuitBreaker circuitBreaker;
     bool overriden;
 }
