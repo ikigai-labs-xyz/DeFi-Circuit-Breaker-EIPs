@@ -12,7 +12,11 @@ interface IAssetCircuitBreaker is IERC7265CircuitBreaker {
     /// For the native asset (ETH on mainnet), MUST be address 0x0000000000000000000000000000000000000001 equivalent to address(1).
     /// @param from MUST be the address from which the assets originated
     /// @param amount MUST be the amount of assets being withdrawn
-    event AssetDeposit(address indexed asset, address indexed from, uint256 amount);
+    event AssetDeposit(
+        address indexed asset,
+        address indexed from,
+        uint256 amount
+    );
 
     /// @dev MUST be emitted in `onTokenOutflow` and `onNativeAssetOutflow` when an asset is successfully withdrawn
     /// @param asset MUST be the address of the asset withdrawn.
@@ -20,7 +24,11 @@ interface IAssetCircuitBreaker is IERC7265CircuitBreaker {
     /// For the native asset (ETH on mainnet), MUST be address 0x0000000000000000000000000000000000000001 equivalent to address(1).
     /// @param recipient MUST be the address of the recipient withdrawing the assets
     /// @param amount MUST be the amount of assets being withdrawn
-    event AssetWithdraw(address indexed asset, address indexed recipient, uint256 amount);
+    event AssetWithdraw(
+        address indexed asset,
+        address indexed recipient,
+        uint256 amount
+    );
 
     /// @dev MUST be emitted in `registerAsset` when an asset is registered
     /// @param asset MUST be the address of the asset for which to set rate limit parameters.
@@ -28,7 +36,11 @@ interface IAssetCircuitBreaker is IERC7265CircuitBreaker {
     /// For the native asset (ETH on mainnet), MUST be address 0x0000000000000000000000000000000000000001 equivalent to address(1).
     /// @param metricThreshold The threshold metric which defines when a rate limit is triggered
     /// @param minAmountToLimit The minimum amount of nominal asset liquidity at which point rate limits can be triggered
-    event AssetRegistered(address indexed asset, uint256 metricThreshold, uint256 minAmountToLimit);
+    event AssetRegistered(
+        address indexed asset,
+        uint256 metricThreshold,
+        uint256 minAmountToLimit
+    );
 
     /// @notice Record EIP-20 token inflow into a protected contract
     /// @dev This method MUST be called from all protected contract methods where an EIP-20 token is transferred in from a user.
@@ -48,7 +60,11 @@ interface IAssetCircuitBreaker is IERC7265CircuitBreaker {
     /// @param _token MUST be an EIP-20 token contract
     /// @param _amount MUST equal the amount of tokens transferred out of the protected contract
     /// @param _recipient MUST be the address of the recipient of the transferred tokens from the protected contract
-    function onTokenOutflow(address _token, uint256 _amount, address _recipient) external;
+    function onTokenOutflow(
+        address _token,
+        uint256 _amount,
+        address _recipient
+    ) external;
 
     /// @notice Record native asset (ETH on mainnet) inflow into a protected contract
     /// @dev This method MUST be called from all protected contract methods where native asset is transferred in from a user.

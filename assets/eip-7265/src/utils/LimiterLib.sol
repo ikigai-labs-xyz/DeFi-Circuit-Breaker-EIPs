@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {Limiter, LiqChangeNode} from "../static/Structs.sol";
 import {SafeCast} from "openzeppelin-contracts/utils/math/SafeCast.sol";
 import {ISettlementModule} from "../interfaces/ISettlementModule.sol";
-
+import {ICircuitBreaker} from "../interfaces/ICircuitBreaker.sol";
 uint256 constant BPS_DENOMINATOR = 10000;
 
 enum LimitStatus {
@@ -20,7 +20,7 @@ library LimiterLib {
     error LimiterNotInitialized();
 
     function init(
-        Limiter storage limiter,
+        bytes32 identifier,
         uint256 minLiqRetainedBps,
         uint256 limitBeginThreshold,
         ISettlementModule settlementModule
@@ -28,14 +28,14 @@ library LimiterLib {
         if (minLiqRetainedBps == 0 || minLiqRetainedBps > BPS_DENOMINATOR) {
             revert InvalidMinimumLiquidityThreshold();
         }
-        if (isInitialized(limiter)) revert LimiterAlreadyInitialized();
-        limiter.minLiqRetainedBps = minLiqRetainedBps;
-        limiter.limitBeginThreshold = limitBeginThreshold;
-        limiter.settlementModule = settlementModule;
+
+        if (isInitialized(identifier)) revert LimiterAlreadyInitialized();
+
+        ICircuitBreaker(msg.sender).addSecurityParameter(identifier, minLiqRetainedBps, limitBeginThreshold, address(settlementModule));
     }
 
     function updateParams(
-        Limiter storage limiter,
+        bytes32 identifier,
         uint256 minLiqRetainedBps,
         uint256 limitBeginThreshold,
         ISettlementModule settlementModule
@@ -43,24 +43,36 @@ library LimiterLib {
         if (minLiqRetainedBps == 0 || minLiqRetainedBps > BPS_DENOMINATOR) {
             revert InvalidMinimumLiquidityThreshold();
         }
-        if (!isInitialized(limiter)) revert LimiterNotInitialized();
-        limiter.minLiqRetainedBps = minLiqRetainedBps;
-        limiter.limitBeginThreshold = limitBeginThreshold;
-        limiter.settlementModule = settlementModule;
+
+        if (!isInitialized(identifier)) revert LimiterNotInitialized();
+
+        ICircuitBreaker(msg.sender).updateSecurityParameter(
+            identifier,
+            minLiqRetainedBps,
+            limitBeginThreshold,
+            address(settlementModule)
+        );
     }
 
     function recordChange(
-        Limiter storage limiter,
+        bytes32 identifier,
         int256 amount,
         uint256 withdrawalPeriod,
         uint256 tickLength
     ) internal {
+
+        ICircuitBreaker circuitBreaker = ICircuitBreaker(msg.sender);
+
         // If token does not have a rate limit, do nothing
-        if (!isInitialized(limiter)) {
+        if (!isInitialized(identifier)) {
             return;
         }
 
-        uint32 currentTickTimestamp = uint32(block.timestamp - (block.timestamp % tickLength));
+        Limiter memory limiter = circuitBreaker.limiters(identifier);
+
+        uint32 currentTickTimestamp = uint32(
+            block.timestamp - (block.timestamp % tickLength)
+        );
         limiter.liqInPeriod += amount;
 
         uint32 listHead = limiter.listHead;
@@ -68,46 +80,58 @@ library LimiterLib {
             // if there is no head, set the head to the new inflow
             limiter.listHead = currentTickTimestamp;
             limiter.listTail = currentTickTimestamp;
-            limiter.listNodes[currentTickTimestamp] = LiqChangeNode({
-                amount: amount,
-                nextTimestamp: 0
-            });
+            circuitBreaker.updateLiquidityChange(
+                identifier,
+                amount,
+                currentTickTimestamp
+            );
         } else {
             // if there is a head, check if the new inflow is within the period
             // if it is, add it to the head
             // if it is not, add it to the tail
             if (block.timestamp - listHead >= withdrawalPeriod) {
-                sync(limiter, withdrawalPeriod);
+                sync(identifier, withdrawalPeriod);
             }
 
             // check if tail is the same as block.timestamp (multiple txs in same block)
             uint32 listTail = limiter.listTail;
             if (listTail == currentTickTimestamp) {
                 // add amount
-                limiter.listNodes[currentTickTimestamp].amount += amount;
+                circuitBreaker.updateLiquidityChange(
+                    identifier,
+                   circuitBreaker.listNodes(identifier, listTail).amount + amount,
+                    currentTickTimestamp
+                );
             } else {
                 // add to tail
-                limiter
-                    .listNodes[listTail]
-                    .nextTimestamp = currentTickTimestamp;
-                limiter.listNodes[currentTickTimestamp] = LiqChangeNode({
-                    amount: amount,
-                    nextTimestamp: 0
-                });
+                circuitBreaker.updateLiquidityChange(
+                    identifier,
+                    amount,
+                    currentTickTimestamp
+                );
                 limiter.listTail = currentTickTimestamp;
             }
         }
+
+        circuitBreaker.updateSecurityParameter(
+            identifier,
+            limiter.minLiqRetainedBps,
+            limiter.limitBeginThreshold,
+            address(limiter.settlementModule)
+        );
     }
 
-    function sync(Limiter storage limiter, uint256 withdrawalPeriod) internal {
-        sync(limiter, withdrawalPeriod, type(uint256).max);
+    function sync(bytes32 identifier, uint256 withdrawalPeriod) internal {
+        sync(identifier, withdrawalPeriod, type(uint256).max);
     }
 
     function sync(
-        Limiter storage limiter,
+        bytes32 identifier,
         uint256 withdrawalPeriod,
         uint256 totalIters
     ) internal {
+        ICircuitBreaker circuitBreaker = ICircuitBreaker(msg.sender);
+        Limiter memory limiter = circuitBreaker.limiters(identifier);
         uint32 currentHead = limiter.listHead;
         int256 totalChange = 0;
         uint256 iter = 0;
@@ -117,7 +141,7 @@ library LimiterLib {
             block.timestamp - currentHead >= withdrawalPeriod &&
             iter < totalIters
         ) {
-            LiqChangeNode storage node = limiter.listNodes[currentHead];
+            LiqChangeNode memory node = circuitBreaker.listNodes(identifier, currentHead);
             totalChange += node.amount;
             currentHead = node.nextTimestamp;
             // Clear data
@@ -146,6 +170,7 @@ library LimiterLib {
         if (!isInitialized(limiter)) {
             return LimitStatus.Uninitialized;
         }
+
         if (limiter.overriden) {
             return LimitStatus.Ok;
         }
@@ -157,15 +182,21 @@ library LimiterLib {
             return LimitStatus.Inactive;
         }
 
-        return 
+        return
             (currentLiq + limiter.liqInPeriod) < //futureLiq
-            // NOTE: uint256 to int256 conversion here is safe
-            (currentLiq * int256(limiter.minLiqRetainedBps)) / int256(BPS_DENOMINATOR) ? //minLiq
-                LimitStatus.Triggered : 
-                LimitStatus.Ok;
+                // NOTE: uint256 to int256 conversion here is safe
+                (currentLiq * int256(limiter.minLiqRetainedBps)) /
+                    int256(BPS_DENOMINATOR) //minLiq
+                ? LimitStatus.Triggered
+                : LimitStatus.Ok;
     }
 
     function isInitialized(
+        bytes32 identifier
+    ) internal view returns (bool) {
+        return ICircuitBreaker(msg.sender).limiters(identifier).minLiqRetainedBps > 0;
+    }
+     function isInitialized(
         Limiter storage limiter
     ) internal view returns (bool) {
         return limiter.minLiqRetainedBps > 0;
